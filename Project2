@@ -1,0 +1,168 @@
+---
+title: "Untitled"
+author: "Caitie Johnson"
+date: "3/15/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##library
+```{r}
+library(mlbench)
+library(caret)
+library(e1071)
+library(klaR)
+library(nnet)
+library(MASS)
+library(rpart)
+library(car)
+library(randomForest)
+library(adabag)
+library(corrplot)
+library(car)
+library(caretEnsemble)
+
+```
+## load dataset
+# I'm removing null values and moving the 'class' variable to the first column of the dataset.
+```{r}
+data(BreastCancer)
+BreastCancer <- na.omit(BreastCancer) 
+BreastCancer$Id <- NULL 
+BC <- cbind(BreastCancer[10],BreastCancer[1:9]) 
+BC
+```
+
+
+##explore
+# I wanted to see what the dimensions of the dataset was, the classes and variable types. I also checked the correlations to see if any of the variables were highly     # correlated. It looks like Cell.Size and Cell.Shape are the most correlated.
+```{r}
+dim(BC)
+head(BC)
+sapply(BC,class)
+for(i in 2:10) {
+    BC[,i] <- as.numeric(as.character(BC[,i]))}
+    
+summary(BC)
+str(BC)
+
+cor(BC[2:10])
+```
+
+## test and training set
+# I divided my dataset into 2 parts, 80% in train and 20$ in validate.
+```{r}
+set.seed(1)
+train<- createDataPartition(BC$Class, p=0.80, list=FALSE)
+validate <- BC[-train,]
+dataset <- BC[train,]
+
+```
+
+# Classification models
+## SVM
+```{r}
+mysvm <- svm(Class ~ ., dataset)
+mysvm.pred <- predict(mysvm, validate)
+table(mysvm.pred,validate$Class)
+```
+
+## Naive Bayes
+```{r}
+mynb <- NaiveBayes(Class ~ ., dataset)
+mynb.pred <- predict(mynb,validate)
+
+table(mynb.pred$class,validate$Class)
+```
+
+## Neural Network
+```{r}
+mynnet <- nnet(Class ~ ., dataset, size=1)
+mynnet.pred <- predict(mynnet,validate,type="class")
+table(mynnet.pred,validate$Class)
+```
+## Decision Trees
+```{r}
+mytree <- rpart(Class ~ ., dataset)
+plot(mytree); text(mytree) # in "iris_tree.ps"
+summary(mytree)
+mytree.pred <- predict(mytree,validate,type="class")
+table(mytree.pred,validate$Class)
+```
+## Leave-1-Out Cross Validation (LOOCV)
+# I couldn't get this part to run with my validation set. It did run with the entire dataset. 
+```{r}
+#ans <- numeric(length(dataset[,1]))
+
+#for (i in 1:length(dataset[,1])) {
+#  mytree <- rpart(Class ~ ., dataset[-i,])
+ # mytree
+ # mytree.pred <- predict(mytree,dataset[i,],type="class")
+#  mytree.pred
+#  ans[i] <- mytree.pred
+#}
+#ans <- factor(ans,labels=levels(dataset$Class))
+#table(ans,dataset$Class)
+```
+
+
+##  Quadratic Discriminant Analysis
+```{r}
+myqda <- qda(Class ~ ., dataset)
+myqda.pred <- predict(myqda, validate)
+table(myqda.pred$class,validate$Class)
+```
+
+## Regularised Discriminant Analysis
+```{r}
+myrda <- rda(Class ~ ., dataset)
+myrda.pred <- predict(myrda, validate)
+table(myrda.pred$class,validate$Class)
+```
+
+## Random Forests
+```{r}
+myrf <- randomForest(Class ~ .,dataset)
+myrf.pred <- predict(myrf, validate)
+table(myrf.pred, validate$Class)
+```
+
+
+##Majority Rule
+# For the ensemble I did a Majority rules, where I combined 7 models using cbind. Then to determine the majority I did rowSums. The accuracy of this model was 96.3%.
+```{r}
+
+models = cbind(mysvm.pred,mynb.pred$class,ifelse(mynnet.pred == 'benign',1,2),mytree.pred,myqda.pred$class,myqda.pred$class,myrf.pred)
+
+majority <- ifelse(rowSums(models)>=8,'malignant','benign')
+
+table(majority,validate$Class)
+
+confusionMatrix(as.factor(majority),validate$Class)
+
+
+```
+
+##boosting 
+# Since I couldn't get all the models to run I wanted to double check my ensemble model by running a boosting model. This seems to be the most accurate with 98.52% 
+# accuracy. 
+```{r}
+boost <- boosting(Class ~., data=dataset )
+pred <- predict(boost,validate, type='class')
+confusionMatrix(as.factor(pred$class),as.factor(validate$Class))
+```
+
+## bagging
+# I also tried the bagging method and this one is more accurate then the ensemble but less accurate then the boosting model, at 97.04%.
+```{r}
+bag <- bagging(Class ~., dataset)
+pred.bag <- predict(bag, validate, type='class')
+confusionMatrix(as.factor(pred.bag$class), as.factor(validate$Class))
+```
+
+
